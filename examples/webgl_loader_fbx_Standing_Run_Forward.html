@@ -1,0 +1,205 @@
+<!-- Código completo -->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <title>3D Scene with Character Controls</title>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, user-scalable=no, minimum-scale=1.0, maximum-scale=1.0">
+    <link type="text/css" rel="stylesheet" href="main.css">
+    <style>
+        /* Estilo para el pie de página dentro del canvas */
+        #footer {
+            position: absolute;
+            bottom: 0;
+            width: 100%;
+            text-align: center;
+            background: rgba(0, 0, 0, 0.7);
+            color: #fff;
+            font-family: Arial, sans-serif;
+            font-size: 14px;
+            padding: 5px 0;
+        }
+
+        #container {
+            position: relative;
+            width: 100%;
+            height: 100vh;
+            overflow: hidden; /* Evita barras de desplazamiento */
+        }
+    </style>
+</head>
+<body>
+    <div id="info">
+        <a href="https://threejs.org" target="_blank" rel="noopener">three.js</a> - FBXLoader<br />
+        Character and animation from <a href="https://www.mixamo.com/" target="_blank" rel="noopener">Mixamo</a>
+    </div>
+
+    <!-- Contenedor principal -->
+    <div id="container">
+        <!-- Footer dentro del canvas -->
+        <div id="footer">
+            <h1>Integrantes: Gonzalez Mayorga Emanuel y Torres Martínez Sergio Enrique</h1>
+            <p>Números de Control: 21200984, 21200636</p>
+            <p>Título: Ninja Sigilozo</p>
+        </div>
+    </div>
+
+    <script type="importmap">
+        {
+            "imports": {
+                "three": "../build/three.module.js",
+                "three/addons/": "./jsm/"
+            }
+        }
+    </script>
+
+    <script type="module">
+        import * as THREE from 'three';
+        import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+        import { FBXLoader } from 'three/addons/loaders/FBXLoader.js';
+        import { RGBELoader } from 'three/addons/loaders/RGBELoader.js';
+
+        let camera, scene, renderer, mixer, clock;
+        let character;
+        let isMoving = false;
+
+        init();
+        animate();
+
+        function init() {
+            const container = document.getElementById('container');
+
+            // Configuración de la cámara
+            camera = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 1, 2000);
+            camera.position.set(100, 200, 300);
+
+            // Configuración de la escena
+            scene = new THREE.Scene();
+            clock = new THREE.Clock();
+
+            // Agregar niebla a la escena (color de la niebla y rango de distancia)
+            scene.fog = new THREE.Fog(0xaaaaaa, 500, 1500);
+
+            // Fondo HDR
+            const rgbeLoader = new RGBELoader();
+            rgbeLoader.load('models/rgbe/rogland_clear_night_4k.hdr', function (texture) {
+                texture.mapping = THREE.EquirectangularReflectionMapping;
+                scene.background = texture;
+                scene.environment = texture;
+            });
+
+            // Iluminación
+            const hemiLight = new THREE.HemisphereLight(0xffffff, 0x444444, 1);
+            hemiLight.position.set(0, 200, 0);
+            scene.add(hemiLight);
+
+            const dirLight = new THREE.DirectionalLight(0xffffff, 1);
+            dirLight.position.set(0, 200, 100);
+            dirLight.castShadow = true;
+            scene.add(dirLight);
+
+            // Piso con textura
+            const textureLoader = new THREE.TextureLoader();
+            const groundTexture = textureLoader.load('models/rgbe/desierto.jpg'); // Cambia esta ruta a tu imagen
+            groundTexture.wrapS = THREE.RepeatWrapping;
+            groundTexture.wrapT = THREE.RepeatWrapping;
+            groundTexture.repeat.set(10, 10); // Ajusta el número de repeticiones
+
+            const groundMaterial = new THREE.MeshStandardMaterial({ map: groundTexture });
+            const ground = new THREE.Mesh(new THREE.PlaneGeometry(2000, 2000), groundMaterial);
+            ground.rotation.x = -Math.PI / 2;
+            ground.receiveShadow = true;
+            scene.add(ground);
+
+            // Grid
+            const grid = new THREE.GridHelper(2000, 20, 0x000000, 0x000000);
+            grid.material.opacity = 0.2;
+            grid.material.transparent = true;
+            scene.add(grid);
+
+            // Cargar modelo FBX
+            const loader = new FBXLoader();
+            loader.load('models/fbx/Standing Run Forward.fbx', function (object) {
+                mixer = new THREE.AnimationMixer(object);
+                const action = mixer.clipAction(object.animations[0]);
+                action.play();
+
+                object.traverse(function (child) {
+                    if (child.isMesh) {
+                        child.castShadow = true;
+                        child.receiveShadow = true;
+                    }
+                });
+
+                character = object;
+                character.position.set(0, 0, 0);
+                scene.add(character);
+            });
+
+            // Renderer
+            renderer = new THREE.WebGLRenderer({ antialias: true });
+            renderer.setPixelRatio(window.devicePixelRatio);
+            renderer.setSize(window.innerWidth, window.innerHeight);
+            renderer.shadowMap.enabled = true;
+            container.appendChild(renderer.domElement);
+
+            // Controles de cámara
+            const controls = new OrbitControls(camera, renderer.domElement);
+            controls.target.set(0, 100, 0);
+            controls.update();
+
+            // Redimensionar ventana
+            window.addEventListener('resize', onWindowResize);
+
+            // Eventos de teclado para el movimiento
+            document.addEventListener('keydown', onKeyDown);
+            document.addEventListener('keyup', onKeyUp);
+        }
+
+        function onKeyDown(event) {
+            if (!character) return;
+
+            switch (event.code) {
+                case 'ArrowUp':
+                    isMoving = true;
+                    character.position.z -= 1;
+                    break;
+
+                case 'ArrowDown':
+                    isMoving = true;
+                    character.position.z += 1;
+                    break;
+
+                case 'ArrowLeft':
+                    character.rotation.y += 0.1;
+                    break;
+
+                case 'ArrowRight':
+                    character.rotation.y -= 0.1;
+                    break;
+            }
+        }
+
+        function onKeyUp(event) {
+            if (event.code === 'ArrowUp' || event.code === 'ArrowDown') {
+                isMoving = false;
+            }
+        }
+
+        function onWindowResize() {
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+        }
+
+        function animate() {
+            requestAnimationFrame(animate);
+
+            const delta = clock.getDelta();
+            if (mixer) mixer.update(delta);
+
+            renderer.render(scene, camera);
+        }
+    </script>
+</body>
+</html>
